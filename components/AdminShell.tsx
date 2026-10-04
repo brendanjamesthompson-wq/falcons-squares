@@ -1,0 +1,2 @@
+import Link from 'next/link';
+export default function AdminShell({children}:{children:React.ReactNode}){return <div className="admin-layout"><aside className="sidebar"><strong>Administration</strong><div style={{height:12}}/><Link href="/admin">Boards</Link><Link href="/admin/boards/new">+ New Board</Link><Link href="/admin/players">Players</Link><Link href="/">Public Site</Link></aside><main className="admin-main">{children}</main></div>}
