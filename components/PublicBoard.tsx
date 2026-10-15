@@ -34,11 +34,30 @@ export default function PublicBoard({board,squares}:{board:Board;squares:Square[
           {Array.from({length:10},(_,col)=>{
             const s=squares.find(x=>x.row_index===row&&x.col_index===col);
             const available=!s?.buyer_name;
-            return <div className={`square ${available?'available':''} ${winSet.has(`${row}-${col}`)?'winner':''}`} key={`${row}-${col}`} title={available?'Available':`${s?.buyer_name} — sold by ${s?.player?.first_name ?? '—'}`}>
-              {!available && !s?.paid?<span className="unpaid" title="Payment pending"/>:null}
-              <div className="buyer">{s?.buyer_name ?? 'AVAILABLE'}</div>
-              {!available?<div className="seller">Sold by {s?.player?.first_name ?? '—'}</div>:null}
-            </div>
+            const squareLabel = `${String.fromCharCode(65 + col)}${row + 1}`;
+
+return <div
+  className={`square ${available?'available':''} ${winSet.has(`${row}-${col}`)?'winner':''}`}
+  key={`${row}-${col}`}
+  title={available
+    ? `${squareLabel} — Available`
+    : `${squareLabel} — ${s?.buyer_name} — sold by ${s?.player?.first_name ?? '—'}`
+  }
+>
+  <div className="square-label">{squareLabel}</div>
+
+  {!available && !s?.paid
+    ? <span className="unpaid" title="Payment pending"/>
+    : null
+  }
+
+  <div className="buyer">{s?.buyer_name ?? 'AVAILABLE'}</div>
+
+  {!available
+    ? <div className="seller">Sold by {s?.player?.first_name ?? '—'}</div>
+    : null
+  }
+</div>
           })}
         </div>)}
       </div></div>
