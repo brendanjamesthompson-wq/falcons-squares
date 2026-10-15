@@ -1,27 +1,528 @@
 'use client';
-import { useMemo,useState } from 'react';
+
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { Board,Player,Square } from '@/lib/types';
-function shuffle(){const a=[0,1,2,3,4,5,6,7,8,9];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-export default function BoardEditor({initialBoard,initialSquares,players,disabled=false}:{initialBoard:Board;initialSquares:Square[];players:Player[];disabled?:boolean}){
- const [board,setBoard]=useState(initialBoard);const [squares,setSquares]=useState(initialSquares);const [selected,setSelected]=useState<Square|null>(null);const [msg,setMsg]=useState('');const router=useRouter();
- const sold=useMemo(()=>squares.filter(s=>s.buyer_name).length,[squares]);
- const sellerTotals=useMemo(()=>players.map(p=>({player:p,count:squares.filter(s=>s.buyer_name&&s.player_id===p.id).length})).sort((a,b)=>b.count-a.count||a.player.jersey_number-b.player.jersey_number),[players,squares]);
- async function saveSquare(e:React.FormEvent<HTMLFormElement>){e.preventDefault();if(!selected||disabled)return;const f=new FormData(e.currentTarget);const patch={buyer_name:String(f.get('buyer_name')||'').trim()||null,player_id:String(f.get('player_id')||'')||null,paid:f.get('paid')==='on',notes:String(f.get('notes')||'').trim()||null};const s=createClient();const {data,error}=await s.from('squares').update(patch).eq('id',selected.id).select('*, player:players(*)').single();if(error){setMsg(error.message);return}setSquares(x=>x.map(q=>q.id===selected.id?data as Square:q));setSelected(null);setMsg('Square saved.');router.refresh()}
- async function updateBoard(patch:Partial<Board>){if(disabled)return;const s=createClient();const {data,error}=await s.from('boards').update(patch).eq('id',board.id).select().single();if(error){setMsg(error.message);return}setBoard(data as Board);setMsg('Board updated.');router.refresh()}
- function randomize(){if(board.numbers_locked)return;setBoard({...board,axis_a:shuffle(),axis_b:shuffle()})}
- async function saveNumbers(lock=false){await updateBoard({axis_a:board.axis_a,axis_b:board.axis_b,numbers_locked:lock||board.numbers_locked})}
- async function saveScores(e:React.FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);const qs:any={};for(const p of ['q1','half','q3','final']){const a=f.get(`${p}_a`),b=f.get(`${p}_b`);if(a!==''&&b!=='')qs[p]=[Number(a),Number(b)]}await updateBoard({quarter_scores:qs})}
- return <>
- <div className="toolbar"><div><div className="eyebrow">{board.status}</div><h1>{board.title}</h1><p>{board.team_a} vs. {board.team_b} · {sold}/100 sold</p></div><a className="btn" href={`/boards/${board.slug}`} target="_blank">View Public Board ↗</a></div>
- {disabled?<div className="notice">Demo mode: editor controls are visible for review but saving is disabled until Supabase is connected.</div>:null}{msg?<p className="small">{msg}</p>:null}
- <div className="panel"><div className="toolbar"><div><h2 style={{margin:0}}>Numbers</h2><span className="small">Randomize only before locking.</span></div><div style={{display:'flex',gap:8}}><button className="btn" onClick={randomize} disabled={board.numbers_locked||disabled}>Randomize</button><button className="btn" onClick={()=>saveNumbers(false)} disabled={disabled}>Save</button><button className="btn btn-primary" onClick={()=>saveNumbers(true)} disabled={board.numbers_locked||disabled}>{board.numbers_locked?'Locked':'Lock Numbers'}</button></div></div>
- <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><strong>{board.team_a}:</strong>{board.axis_a.map((n,i)=><span className="pill" key={i}>{n}</span>)}</div><div style={{height:8}}/><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><strong>{board.team_b}:</strong>{board.axis_b.map((n,i)=><span className="pill" key={i}>{n}</span>)}</div></div>
- <div className="panel"><h2>Squares</h2><div className="board-wrap"><div className="board-grid"><div className="corner">EDIT</div>{board.axis_a.map((n,i)=><div className="axis" key={i}>{board.numbers_locked?n:'–'}</div>)}{Array.from({length:10},(_,row)=><div style={{display:'contents'}} key={row}><div className="axis">{board.numbers_locked?board.axis_b[row]:'–'}</div>{Array.from({length:10},(_,col)=>{const sq=squares.find(s=>s.row_index===row&&s.col_index===col)!;return <button type="button" className={`square ${sq?.buyer_name?'':'available'}`} onClick={()=>setSelected(sq)} key={`${row}-${col}`}><div className="buyer">{sq?.buyer_name||'AVAILABLE'}</div><div className="seller">{sq?.player?.first_name?`#${sq.player.jersey_number} ${sq.player.first_name}`:'Click to edit'}</div></button>})}</div>)}</div></div></div>
- <div className="panel"><h2>Sales by Player</h2><div className="cards">{sellerTotals.map(x=><div className="result-card" key={x.player.id}><div className="label">#{x.player.jersey_number}</div><strong>{x.player.first_name}</strong><div className="small">{x.count} square{x.count===1?'':'s'} sold</div></div>)}</div></div>
- <div className="panel"><h2>Game Scores</h2><form onSubmit={saveScores}><table className="table"><thead><tr><th>Period</th><th>{board.team_a}</th><th>{board.team_b}</th></tr></thead><tbody>{[['q1','1st Quarter'],['half','Halftime'],['q3','3rd Quarter'],['final','Final']].map(([p,l])=><tr key={p}><td>{l}</td><td><input style={{width:90}} name={`${p}_a`} type="number" defaultValue={(board.quarter_scores as any)?.[p]?.[0]??''}/></td><td><input style={{width:90}} name={`${p}_b`} type="number" defaultValue={(board.quarter_scores as any)?.[p]?.[1]??''}/></td></tr>)}</tbody></table><div style={{height:12}}/><button className="btn btn-primary" disabled={disabled}>Save Scores</button></form></div>
- <div className="panel"><h2>Board Status</h2><select value={board.status} onChange={e=>updateBoard({status:e.target.value as Board['status']})} disabled={disabled}><option value="draft">Draft</option><option value="open">Open / Public</option><option value="closed">Closed</option><option value="complete">Complete / Archived</option></select></div>
- {selected?<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:100,display:'grid',placeItems:'center',padding:20}} onClick={()=>setSelected(null)}><div className="panel" style={{width:'min(520px,100%)',margin:0}} onClick={e=>e.stopPropagation()}><div className="toolbar"><h2 style={{margin:0}}>Square {String.fromCharCode(65+selected.row_index)}{selected.col_index+1}</h2><button className="btn" onClick={()=>setSelected(null)}>Close</button></div><form onSubmit={saveSquare}><div className="field"><label>Buyer name</label><input name="buyer_name" defaultValue={selected.buyer_name??''}/></div><div style={{height:12}}/><div className="field"><label>Sold by player</label><select name="player_id" defaultValue={selected.player_id??''}><option value="">— Select player —</option>{players.map(p=><option value={p.id} key={p.id}>#{p.jersey_number} {p.first_name}</option>)}</select></div><div style={{height:12}}/><label><input type="checkbox" name="paid" defaultChecked={selected.paid}/> Paid</label><div style={{height:12}}/><div className="field"><label>Notes</label><textarea name="notes" rows={3} defaultValue={selected.notes??''}/></div><div style={{height:14}}/><button className="btn btn-primary" disabled={disabled}>Save Square</button></form></div></div>:null}
- </>
+import type { Board, Player, Square } from '@/lib/types';
+
+function shuffle() {
+  const a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+
+  return a;
+}
+
+export default function BoardEditor({
+  initialBoard,
+  initialSquares,
+  players,
+  disabled = false
+}: {
+  initialBoard: Board;
+  initialSquares: Square[];
+  players: Player[];
+  disabled?: boolean;
+}) {
+  const [board, setBoard] = useState(initialBoard);
+  const [squares, setSquares] = useState(initialSquares);
+  const [selected, setSelected] = useState<Square | null>(null);
+  const [msg, setMsg] = useState('');
+  const router = useRouter();
+
+  const sold = useMemo(
+    () => squares.filter(s => s.buyer_name).length,
+    [squares]
+  );
+
+  const sellerTotals = useMemo(
+    () =>
+      players
+        .map(p => ({
+          player: p,
+          count: squares.filter(
+            s => s.buyer_name && s.player_id === p.id
+          ).length
+        }))
+        .sort(
+          (a, b) =>
+            b.count - a.count ||
+            a.player.jersey_number - b.player.jersey_number
+        ),
+    [players, squares]
+  );
+
+  async function saveSquare(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    if (!selected || disabled) return;
+
+    const f = new FormData(e.currentTarget);
+
+    const patch = {
+      buyer_name: String(f.get('buyer_name') || '').trim() || null,
+      player_id: String(f.get('player_id') || '') || null,
+      paid: f.get('paid') === 'on',
+      notes: String(f.get('notes') || '').trim() || null
+    };
+
+    const s = createClient();
+
+    const { data, error } = await s
+      .from('squares')
+      .update(patch)
+      .eq('id', selected.id)
+      .select('*, player:players(*)')
+      .single();
+
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
+
+    setSquares(x =>
+      x.map(q => (q.id === selected.id ? (data as Square) : q))
+    );
+
+    setSelected(null);
+    setMsg('Square saved.');
+    router.refresh();
+  }
+
+  async function updateBoard(patch: Partial<Board>) {
+    if (disabled) return;
+
+    const s = createClient();
+
+    const { data, error } = await s
+      .from('boards')
+      .update(patch)
+      .eq('id', board.id)
+      .select()
+      .single();
+
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
+
+    setBoard(data as Board);
+    setMsg('Board updated.');
+    router.refresh();
+  }
+
+  function randomize() {
+    if (board.numbers_locked) return;
+
+    setBoard({
+      ...board,
+      axis_a: shuffle(),
+      axis_b: shuffle()
+    });
+  }
+
+  async function saveNumbers(lock = false) {
+    await updateBoard({
+      axis_a: board.axis_a,
+      axis_b: board.axis_b,
+      numbers_locked: lock || board.numbers_locked
+    });
+  }
+
+  async function saveScores(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const f = new FormData(e.currentTarget);
+    const qs: any = {};
+
+    for (const p of ['q1', 'half', 'q3', 'final']) {
+      const a = f.get(`${p}_a`);
+      const b = f.get(`${p}_b`);
+
+      if (a !== '' && b !== '') {
+        qs[p] = [Number(a), Number(b)];
+      }
+    }
+
+    await updateBoard({
+      quarter_scores: qs
+    });
+  }
+
+  return (
+    <>
+      <div className="toolbar">
+        <div>
+          <div className="eyebrow">{board.status}</div>
+          <h1>{board.title}</h1>
+          <p>
+            {board.team_a} vs. {board.team_b} · {sold}/100 sold
+          </p>
+        </div>
+
+        <a
+          className="btn"
+          href={`/boards/${board.slug}`}
+          target="_blank"
+        >
+          View Public Board ↗
+        </a>
+      </div>
+
+      {disabled ? (
+        <div className="notice">
+          Demo mode: editor controls are visible for review but saving is
+          disabled until Supabase is connected.
+        </div>
+      ) : null}
+
+      {msg ? <p className="small">{msg}</p> : null}
+
+      <div className="panel">
+        <div className="toolbar">
+          <div>
+            <h2 style={{ margin: 0 }}>Numbers</h2>
+            <span className="small">
+              Randomize only before locking.
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn"
+              onClick={randomize}
+              disabled={board.numbers_locked || disabled}
+            >
+              Randomize
+            </button>
+
+            <button
+              className="btn"
+              onClick={() => saveNumbers(false)}
+              disabled={disabled}
+            >
+              Save
+            </button>
+
+            <button
+              className="btn btn-primary"
+              onClick={() => saveNumbers(true)}
+              disabled={board.numbers_locked || disabled}
+            >
+              {board.numbers_locked ? 'Locked' : 'Lock Numbers'}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <strong>{board.team_a}:</strong>
+
+          {board.axis_a.map((n, i) => (
+            <span className="pill" key={i}>
+              {n}
+            </span>
+          ))}
+        </div>
+
+        <div style={{ height: 8 }} />
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <strong>{board.team_b}:</strong>
+
+          {board.axis_b.map((n, i) => (
+            <span className="pill" key={i}>
+              {n}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>Squares</h2>
+
+        <div className="board-wrap">
+          <div className="board-grid">
+            <div className="corner">EDIT</div>
+
+            {board.axis_a.map((n, i) => (
+              <div className="axis" key={i}>
+                {board.numbers_locked ? n : '–'}
+              </div>
+            ))}
+
+            {Array.from({ length: 10 }, (_, row) => (
+              <div style={{ display: 'contents' }} key={row}>
+                <div className="axis">
+                  {board.numbers_locked ? board.axis_b[row] : '–'}
+                </div>
+
+                {Array.from({ length: 10 }, (_, col) => {
+                  const sq = squares.find(
+                    s =>
+                      s.row_index === row &&
+                      s.col_index === col
+                  )!;
+
+                  const squareLabel =
+                    `${String.fromCharCode(65 + col)}${row + 1}`;
+
+                  return (
+                    <button
+                      type="button"
+                      className={`square ${
+                        sq?.buyer_name ? '' : 'available'
+                      }`}
+                      onClick={() => setSelected(sq)}
+                      key={`${row}-${col}`}
+                      title={
+                        sq?.buyer_name
+                          ? `${squareLabel} — ${sq.buyer_name}`
+                          : `${squareLabel} — Available`
+                      }
+                    >
+                      <div className="square-label">
+                        {squareLabel}
+                      </div>
+
+                      <div className="buyer">
+                        {sq?.buyer_name || 'AVAILABLE'}
+                      </div>
+
+                      <div className="seller">
+                        {sq?.player?.first_name
+                          ? `#${sq.player.jersey_number} ${sq.player.first_name}`
+                          : 'Click to edit'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>Sales by Player</h2>
+
+        <div className="cards">
+          {sellerTotals.map(x => (
+            <div
+              className="result-card"
+              key={x.player.id}
+            >
+              <div className="label">
+                #{x.player.jersey_number}
+              </div>
+
+              <strong>{x.player.first_name}</strong>
+
+              <div className="small">
+                {x.count} square{x.count === 1 ? '' : 's'} sold
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>Game Scores</h2>
+
+        <form onSubmit={saveScores}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>{board.team_a}</th>
+                <th>{board.team_b}</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {[
+                ['q1', '1st Quarter'],
+                ['half', 'Halftime'],
+                ['q3', '3rd Quarter'],
+                ['final', 'Final']
+              ].map(([p, l]) => (
+                <tr key={p}>
+                  <td>{l}</td>
+
+                  <td>
+                    <input
+                      style={{ width: 90 }}
+                      name={`${p}_a`}
+                      type="number"
+                      defaultValue={
+                        (board.quarter_scores as any)?.[p]?.[0] ?? ''
+                      }
+                    />
+                  </td>
+
+                  <td>
+                    <input
+                      style={{ width: 90 }}
+                      name={`${p}_b`}
+                      type="number"
+                      defaultValue={
+                        (board.quarter_scores as any)?.[p]?.[1] ?? ''
+                      }
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div style={{ height: 12 }} />
+
+          <button
+            className="btn btn-primary"
+            disabled={disabled}
+          >
+            Save Scores
+          </button>
+        </form>
+      </div>
+
+      <div className="panel">
+        <h2>Board Status</h2>
+
+        <select
+          value={board.status}
+          onChange={e =>
+            updateBoard({
+              status: e.target.value as Board['status']
+            })
+          }
+          disabled={disabled}
+        >
+          <option value="draft">Draft</option>
+          <option value="open">Open / Public</option>
+          <option value="closed">Closed</option>
+          <option value="complete">
+            Complete / Archived
+          </option>
+        </select>
+      </div>
+
+      {selected ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,.45)',
+            zIndex: 100,
+            display: 'grid',
+            placeItems: 'center',
+            padding: 20
+          }}
+          onClick={() => setSelected(null)}
+        >
+          <div
+            className="panel"
+            style={{
+              width: 'min(520px,100%)',
+              margin: 0
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="toolbar">
+              <h2 style={{ margin: 0 }}>
+                Square{' '}
+                {String.fromCharCode(
+                  65 + selected.col_index
+                )}
+                {selected.row_index + 1}
+              </h2>
+
+              <button
+                className="btn"
+                onClick={() => setSelected(null)}
+              >
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={saveSquare}>
+              <div className="field">
+                <label>Buyer name</label>
+
+                <input
+                  name="buyer_name"
+                  defaultValue={
+                    selected.buyer_name ?? ''
+                  }
+                />
+              </div>
+
+              <div style={{ height: 12 }} />
+
+              <div className="field">
+                <label>Sold by player</label>
+
+                <select
+                  name="player_id"
+                  defaultValue={
+                    selected.player_id ?? ''
+                  }
+                >
+                  <option value="">
+                    — Select player —
+                  </option>
+
+                  {players.map(p => (
+                    <option
+                      value={p.id}
+                      key={p.id}
+                    >
+                      #{p.jersey_number}{' '}
+                      {p.first_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ height: 12 }} />
+
+              <label>
+                <input
+                  type="checkbox"
+                  name="paid"
+                  defaultChecked={selected.paid}
+                />{' '}
+                Paid
+              </label>
+
+              <div style={{ height: 12 }} />
+
+              <div className="field">
+                <label>Notes</label>
+
+                <textarea
+                  name="notes"
+                  rows={3}
+                  defaultValue={
+                    selected.notes ?? ''
+                  }
+                />
+              </div>
+
+              <div style={{ height: 14 }} />
+
+              <button
+                className="btn btn-primary"
+                disabled={disabled}
+              >
+                Save Square
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
 }
