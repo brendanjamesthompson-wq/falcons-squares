@@ -19,3 +19,83 @@
 .square.available .square-label {
   opacity: 0.9;
 }
+.active-board-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.active-board-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  padding: 24px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+}
+
+.active-board-card h2 {
+  margin: 6px 0 10px;
+  font-size: 28px;
+}
+
+.active-matchup {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 18px;
+}
+
+.active-matchup span {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.active-board-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.active-payouts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.active-payouts div {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.active-payouts span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.active-payouts strong {
+  display: block;
+  margin-top: 3px;
+}
+
+.active-board-button {
+  display: block;
+  text-align: center;
+  width: 100%;
+}
+
+@media (max-width: 800px) {
+  .active-board-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .active-payouts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
